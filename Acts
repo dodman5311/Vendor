@@ -1,0 +1,218 @@
+local actions = {
+	expiringActions = {},
+}
+
+local function callConnection(self, connection, ...)
+	for _, func in ipairs(connection.functions) do
+		task.spawn(func, ...)
+	end
+end
+
+actions.OnActAdded = {
+	functions = {},
+
+	Connect = function(self, callback)
+		local connection = self
+		local index = #self.functions + 1
+
+		self.functions[index] = callback
+
+		return {
+			Disconnect = function()
+				table.remove(connection.functions, index)
+			end,
+		}
+	end,
+}
+
+actions.OnActRemoved = {
+	functions = {},
+
+	Connect = function(self, callback)
+		local connection = self
+		local index = #self.functions + 1
+
+		self.functions[index] = callback
+
+		return {
+			Disconnect = function()
+				table.remove(connection.functions, index)
+			end,
+		}
+	end,
+}
+
+actions.Condition = {
+	new = function(checkType, conditionsTable)
+		return {
+			CheckType = checkType,
+			ConditionsTable = conditionsTable,
+		}
+	end,
+
+	blacklist = function(...)
+		return {
+			CheckType = "Blacklist",
+			ConditionsTable = { ... },
+		}
+	end,
+
+	whitelist = function(...)
+		return {
+			CheckType = "Whitelist",
+			ConditionsTable = { ... },
+		}
+	end,
+}
+
+function actions:checkAct(...)
+	local checkAll = false
+	local values = { ... }
+
+	if typeof(...) == "table" then
+		values = ...
+	end
+
+	if typeof(values[1]) == "boolean" and values[1] then
+		checkAll = true
+	end
+
+	local getAll = true
+	for _, value in ipairs(values) do
+		if checkAll == true then --// check if all of the actions are active
+			if table.find(self, value) then
+				continue
+			end
+			getAll = false
+		else
+			if not table.find(self, value) then
+				continue
+			end
+			return true
+		end
+	end
+
+	if checkAll == true then
+		return getAll
+	end
+end
+
+function actions:createAct(...)
+	local toAdd = { ... }
+	local actCreated
+	for _, name in ipairs(toAdd) do
+		if table.find(self, name) then
+			continue
+		end
+
+		table.insert(self, name)
+		callConnection(self, self.OnActAdded, name)
+
+		actCreated = table.find(self, name)
+	end
+
+	return actCreated
+end
+
+function actions:createExpiringAct(Act_Name, expireTime)
+	self:createAct(Act_Name)
+
+	self.expiringActions[Act_Name] = os.clock()
+
+	task.delay(expireTime, function()
+		if not self.expiringActions[Act_Name] or os.clock() - self.expiringActions[Act_Name] < expireTime then
+			return
+		end
+
+		self:removeAct(Act_Name)
+		self.expiringActions[Act_Name] = nil
+	end)
+end
+
+function actions:removeAct(...)
+	local toRemove = { ... }
+	if typeof(...) == "table" then
+		toRemove = ...
+	end
+
+	for _, name in ipairs(toRemove) do
+		if not table.find(self, name) then
+			continue
+		end
+
+		table.remove(self, table.find(self, name))
+		callConnection(self, self.OnActRemoved, name)
+	end
+end
+
+function actions:applyConditions(conditions)
+	if not conditions then
+		return
+	end
+
+	local checkActResult = self:checkAct(conditions.ConditionsTable)
+
+	if conditions.CheckType == "Blacklist" then
+		return checkActResult
+	elseif conditions.CheckType == "Whitelist" then
+		return not checkActResult
+	end
+end
+
+function actions:createTempAct(name, func, conditions, ...)
+	if self:checkAct(name) or self:applyConditions(conditions) then
+		return
+	end
+
+	self:createAct(name)
+	local result = func(...)
+	self:removeAct(name)
+
+	if not result then
+		result = true
+	end
+	return result
+end
+
+function actions:waitForAct(...)
+	local checkAll = false
+	local values = { ... }
+
+	if typeof(...) == "table" then
+		values = ...
+	end
+
+	if typeof(values[1]) == "boolean" and values[1] then
+		checkAll = true
+	end
+
+	if self:checkAct(values, checkAll) then
+		repeat
+			task.wait()
+		until not self:checkAct(values, checkAll)
+	end
+end
+
+function actions:removeAllActs()
+	local toRemove = {}
+	for _, v in ipairs(self) do
+		table.insert(toRemove, v)
+	end
+
+	self:removeAct(toRemove)
+end
+
+function actions:new()
+	local newActions = {}
+
+	for i, v in pairs(self) do
+		if tonumber(i) then
+			continue
+		end
+		newActions[i] = v
+	end
+
+	return newActions
+end
+
+return actions
