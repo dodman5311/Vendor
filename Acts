@@ -2,7 +2,7 @@ local actions = {
 	expiringActions = {},
 }
 
-local function callConnection(self, connection, ...)
+local function callConnection(connection, ...)
 	for _, func in ipairs(connection.functions) do
 		task.spawn(func, ...)
 	end
@@ -43,10 +43,10 @@ actions.OnActRemoved = {
 }
 
 actions.Condition = {
-	new = function(checkType, conditionsTable)
+	new = function(checkType, ...)
 		return {
 			CheckType = checkType,
-			ConditionsTable = conditionsTable,
+			ConditionsTable = { ... },
 		}
 	end,
 
@@ -106,7 +106,7 @@ function actions:createAct(...)
 		end
 
 		table.insert(self, name)
-		callConnection(self, self.OnActAdded, name)
+		callConnection(self.OnActAdded, name)
 
 		actCreated = table.find(self, name)
 	end
@@ -141,7 +141,7 @@ function actions:removeAct(...)
 		end
 
 		table.remove(self, table.find(self, name))
-		callConnection(self, self.OnActRemoved, name)
+		callConnection(self.OnActRemoved, name)
 	end
 end
 
