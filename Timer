@@ -1,87 +1,218 @@
-local module = {
-	timerQueue = {}
+local actions = {
+	expiringActions = {},
 }
 
-local RUN_SERVICE = game:GetService("RunService")
+local function callConnection(connection, ...)
+	for _, func in ipairs(connection.functions) do
+		task.spawn(func, ...)
+	end
+end
 
-module.new = function(self, timerName, waitTime, Function, ...)
-	local queue = self
+actions.OnActAdded = {
+	functions = {},
 
-	if not timerName then
-		timerName = #queue + 1
+	Connect = function(self, callback)
+		local connection = self
+		local index = #self.functions + 1
+
+		self.functions[index] = callback
+
+		return {
+			Disconnect = function()
+				table.remove(connection.functions, index)
+			end,
+		}
+	end,
+}
+
+actions.OnActRemoved = {
+	functions = {},
+
+	Connect = function(self, callback)
+		local connection = self
+		local index = #self.functions + 1
+
+		self.functions[index] = callback
+
+		return {
+			Disconnect = function()
+				table.remove(connection.functions, index)
+			end,
+		}
+	end,
+}
+
+actions.Condition = {
+	new = function(checkType, conditionsTable)
+		return {
+			CheckType = checkType,
+			ConditionsTable = conditionsTable,
+		}
+	end,
+
+	blacklist = function(...)
+		return {
+			CheckType = "Blacklist",
+			ConditionsTable = { ... },
+		}
+	end,
+
+	whitelist = function(...)
+		return {
+			CheckType = "Whitelist",
+			ConditionsTable = { ... },
+		}
+	end,
+}
+
+function actions:checkAct(...)
+	local checkAll = false
+	local values = { ... }
+
+	if typeof(...) == "table" then
+		values = ...
 	end
 
-	if queue.timerQueue[timerName] then return end
-	
+	if typeof(values[1]) == "boolean" and values[1] then
+		checkAll = true
+	end
 
-	local timer = {
-		Connection = nil;
-		CallTime = os.clock();
-		WaitTime = waitTime;
-		['Function'] = Function;
-		Parameters = {...};
-	}
-	
-	function timer:Run()
-		if self.Connection then return end
+	local getAll = true
+	for _, value in ipairs(values) do
+		if checkAll == true then --// check if all of the actions are active
+			if table.find(self, value) then
+				continue
+			end
+			getAll = false
+		else
+			if not table.find(self, value) then
+				continue
+			end
+			return true
+		end
+	end
 
-		self.CallTime = os.clock()
-		self.Connection = RUN_SERVICE.Heartbeat:Connect(function()
-			if os.clock() - self.CallTime < self.WaitTime then return end
+	if checkAll == true then
+		return getAll
+	end
+end
 
-			self.Connection:Disconnect()
-			self.Connection = nil
-			self.Function(table.unpack(self.Parameters))
-		end)
-	end
-	
-	function timer:Reset()
-		self.CallTime = os.clock()
-	end
-	
-	function timer:Delay(amount)
-		self.CallTime = os.clock() - amount
-	end
-	
-	function timer:Update(index, value)
-		self[index] = value
-	end
-	
-	function timer:UpdateFunction(value, ...)
-		self['Function'] = value
-		self['Parameters'] = ...
-	end
-	
-	function timer:Cancel()
-		if not self.Connection then return end
-		self.Connection:Disconnect()
-	end
-	
-	function timer:Destroy()
-		if self.Connection then
-			self.Connection:Disconnect()
+function actions:createAct(...)
+	local toAdd = { ... }
+	local actCreated
+	for _, name in ipairs(toAdd) do
+		if table.find(self, name) then
+			continue
 		end
 
-		queue.timerQueue[timerName] = nil
+		table.insert(self, name)
+		callConnection(self.OnActAdded, name)
+
+		actCreated = table.find(self, name)
 	end
-	
-	function timer:GetCurrentTime()
-		return os.clock() - self.CallTime
+
+	return actCreated
+end
+
+function actions:createExpiringAct(Act_Name, expireTime)
+	self:createAct(Act_Name)
+
+	self.expiringActions[Act_Name] = os.clock()
+
+	task.delay(expireTime, function()
+		if not self.expiringActions[Act_Name] or os.clock() - self.expiringActions[Act_Name] < expireTime then
+			return
+		end
+
+		self:removeAct(Act_Name)
+		self.expiringActions[Act_Name] = nil
+	end)
+end
+
+function actions:removeAct(...)
+	local toRemove = { ... }
+	if typeof(...) == "table" then
+		toRemove = ...
 	end
-	
-	queue.timerQueue[timerName] = timer
-	return queue.timerQueue[timerName]
+
+	for _, name in ipairs(toRemove) do
+		if not table.find(self, name) then
+			continue
+		end
+
+		table.remove(self, table.find(self, name))
+		callConnection(self.OnActRemoved, name)
+	end
 end
 
-function module:newQueue()
-	return {
-		timerQueue = {};
-		new = module['new']
-	}
+function actions:applyConditions(conditions)
+	if not conditions then
+		return
+	end
+
+	local checkActResult = self:checkAct(conditions.ConditionsTable)
+
+	if conditions.CheckType == "Blacklist" then
+		return checkActResult
+	elseif conditions.CheckType == "Whitelist" then
+		return not checkActResult
+	end
 end
 
-function module:getStopwatch(timerName)
-	return self[timerName]
+function actions:createTempAct(name, func, conditions, ...)
+	if self:checkAct(name) or self:applyConditions(conditions) then
+		return
+	end
+
+	self:createAct(name)
+	local result = func(...)
+	self:removeAct(name)
+
+	if not result then
+		result = true
+	end
+	return result
 end
 
-return module
+function actions:waitForAct(...)
+	local checkAll = false
+	local values = { ... }
+
+	if typeof(...) == "table" then
+		values = ...
+	end
+
+	if typeof(values[1]) == "boolean" and values[1] then
+		checkAll = true
+	end
+
+	if self:checkAct(values, checkAll) then
+		repeat
+			task.wait()
+		until not self:checkAct(values, checkAll)
+	end
+end
+
+function actions:removeAllActs()
+	local toRemove = {}
+	for _, v in ipairs(self) do
+		table.insert(toRemove, v)
+	end
+
+	self:removeAct(toRemove)
+end
+
+function actions:new()
+	local newActions = {}
+
+	for i, v in pairs(self) do
+		if tonumber(i) then
+			continue
+		end
+		newActions[i] = v
+	end
+
+	return newActions
+end
+
+return actions
