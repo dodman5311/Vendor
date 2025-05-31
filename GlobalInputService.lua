@@ -17,6 +17,13 @@ export type InputAction = {
 	RemoveKeybinds: (self: InputAction, bindGroup: "Gamepad" | "Keyboard", T...) -> nil,
 	ReplaceKeybinds: (self: InputAction, bindGroup: "Gamepad" | "Keyboard", keybindsTable: { InputObject }) -> nil,
 }
+type InputType = "Keyboard" | "Gamepad" | "Touch"
+type GamepadType = "Ps4" | "Xbox"?
+export type InputSource = {
+	Type: InputType,
+	GamepadType: GamepadType,
+	LastGamepadInput: InputObject?,
+}
 
 local CUSTOM_GAMEPAD_GUI = true
 
@@ -27,16 +34,26 @@ local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 
-local Player = Players.LocalPlayer
-local stepped
+local Player: Player = Players.LocalPlayer
+local stepped: RBXScriptConnection?
 
 local selectionUi: ScreenGui?
 local selectionImage: GuiObject?
 local hideSelection: ImageLabel?
 
+local lastInputType: string?
+local lastGamepadType: string?
+local lastGamepadInput: InputObject?
+
 local globalInputService = {
-	inputType = "Keyboard",
-	gamepadType = "Xbox",
+	InputTypeChanged = Instance.new("BindableEvent") :: BindableEvent,
+	GetInputSource = function(self): InputSource
+		return {
+			Type = self._inputType,
+			GamepadType = self._inputType == "Gamepad" and self._gamepadType,
+			LastGamepadInput = lastGamepadInput,
+		}
+	end,
 
 	inputIcons = {
 		Ps4 = {
@@ -143,11 +160,10 @@ local globalInputService = {
 	},
 
 	inputs = {} :: { InputAction },
-	LastGamepadInput = nil,
-}
 
-local lastInputType
-local lastGamepadType
+	_inputType = "Keyboard" :: InputType,
+	_gamepadType = "Xbox" :: GamepadType,
+}
 
 local ps4Keys = {
 	"ButtonCross",
@@ -188,6 +204,12 @@ local function createCustomGamepadGui()
 	selectionUi.Name = "GamepadSelectionUi"
 
 	selectionImage = Instance.new("ImageLabel")
+	selectionImage.Parent = selectionUi
+	selectionImage.Image = ""
+	selectionImage.BackgroundTransparency = 1
+	selectionImage.ScaleType = Enum.ScaleType.Slice
+	selectionImage.SliceCenter = Rect.new(0, 0, 0, 0)
+	selectionImage.SliceScale = 0
 
 	-- Hide Default UI
 	hideSelection = Instance.new("ImageLabel")
@@ -201,9 +223,9 @@ local function setGamepadType(lastInput)
 	local inputName = UserInputService:GetStringForKeyCode(lastInput.KeyCode)
 
 	if table.find(ps4Keys, inputName) then
-		globalInputService.gamepadType = "Ps4"
+		globalInputService._gamepadType = "Ps4"
 	elseif table.find(xboxKeys, inputName) then
-		globalInputService.gamepadType = "Xbox"
+		globalInputService._gamepadType = "Xbox"
 	end
 end
 
@@ -213,7 +235,7 @@ function globalInputService:CheckKeyPrompts()
 
 		if image:GetAttribute("InputName") and globalInputService.inputs[image:GetAttribute("InputName")] then
 			iconKey =
-				globalInputService.inputs[image:GetAttribute("InputName")].KeyInputs[globalInputService.inputType][1].Name
+				globalInputService.inputs[image:GetAttribute("InputName")].KeyInputs[globalInputService._inputType][1].Name
 		end
 
 		local KEY = image:GetAttribute("Key")
@@ -221,12 +243,12 @@ function globalInputService:CheckKeyPrompts()
 		local INPUT_NAME = image:GetAttribute("InputName")
 
 		if
-			(globalInputService.inputType == "Gamepad" and BUTTON)
-			or (globalInputService.inputType == "Keyboard" and KEY)
+			(globalInputService._inputType == "Gamepad" and BUTTON)
+			or (globalInputService._inputType == "Keyboard" and KEY)
 		then
-			iconKey = globalInputService.inputType == "Gamepad" and BUTTON or KEY
+			iconKey = globalInputService._inputType == "Gamepad" and BUTTON or KEY
 		elseif INPUT_NAME and globalInputService.inputs[INPUT_NAME] then
-			iconKey = globalInputService.inputs[INPUT_NAME].KeyInputs[globalInputService.inputType][1].Name
+			iconKey = globalInputService.inputs[INPUT_NAME].KeyInputs[globalInputService._inputType][1].Name
 		end
 
 		if not iconKey then
@@ -242,8 +264,8 @@ function globalInputService:CheckKeyPrompts()
 			imageId = globalInputService.inputIcons.Misc[iconKey]
 		elseif globalInputService.inputIcons.Keyboard[iconKey] then
 			imageId = globalInputService.inputIcons.Keyboard[iconKey]
-		elseif globalInputService.inputIcons[globalInputService.gamepadType][iconKey] then
-			imageId = globalInputService.inputIcons[globalInputService.gamepadType][iconKey]
+		elseif globalInputService.inputIcons[globalInputService._gamepadType][iconKey] then
+			imageId = globalInputService.inputIcons[globalInputService._gamepadType][iconKey]
 		else
 			imageId = globalInputService.inputIcons.Misc.Unknown
 		end
@@ -261,24 +283,29 @@ local function setInputType(lastInput)
 	end
 
 	if lastInput.KeyCode == Enum.UserInputType.Touch then
-		globalInputService.inputType = "Mobile"
+		globalInputService._inputType = "Mobile"
 		return
 	end
 
 	if lastInput.UserInputType.Name:find("Gamepad") then
-		globalInputService.inputType = "Gamepad"
+		globalInputService._inputType = "Gamepad"
 		setGamepadType(lastInput)
-		globalInputService.LastGamepadInput = lastInput
+		lastGamepadInput = lastInput
 	else
-		globalInputService.inputType = "Keyboard"
+		globalInputService._inputType = "Keyboard"
 	end
 
-	if lastInputType ~= globalInputService.inputType or lastGamepadType ~= globalInputService.gamepadType then
+	if lastInputType ~= globalInputService._inputType or lastGamepadType ~= globalInputService._gamepadType then
 		globalInputService:CheckKeyPrompts()
+		globalInputService.inputTypeChanged:Fire(
+			globalInputService._inputType,
+			lastInputType,
+			globalInputService._gamepadType
+		)
 	end
 
-	lastInputType = globalInputService.inputType
-	lastGamepadType = globalInputService.gamepadType
+	lastInputType = globalInputService._inputType
+	lastGamepadType = globalInputService._gamepadType
 end
 
 local function Lerp(num, goal, i)
