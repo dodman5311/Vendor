@@ -18,6 +18,8 @@ export type InputAction = {
 	ReplaceKeybinds: (self: InputAction, bindGroup: "Gamepad" | "Keyboard", keybindsTable: { InputObject }) -> nil,
 }
 
+local CUSTOM_GAMEPAD_GUI = true
+
 local CollectionService = game:GetService("CollectionService")
 local ContextActionService = game:GetService("ContextActionService")
 local RunService = game:GetService("RunService")
@@ -28,11 +30,9 @@ local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
 local stepped
 
--------------------------------------// Create Gamepad Gui
-
-local customGamepadUi: ScreenGui?
-
----------------------------------------------------------
+local selectionUi: ScreenGui?
+local selectionImage: GuiObject?
+local hideSelection: ImageLabel?
 
 local globalInputService = {
 	inputType = "Keyboard",
@@ -181,6 +181,22 @@ local xboxKeys = {
 	"ButtonSelect",
 }
 
+local function createCustomGamepadGui()
+	-- Essentials
+	selectionUi = Instance.new("ScreenGui")
+	selectionUi.DisplayOrder = 100
+	selectionUi.Name = "GamepadSelectionUi"
+
+	selectionImage = Instance.new("ImageLabel")
+
+	-- Hide Default UI
+	hideSelection = Instance.new("ImageLabel")
+	hideSelection.BackgroundTransparency = 1
+	hideSelection.ImageTransparency = 1
+
+	-- Extra
+end
+
 local function setGamepadType(lastInput)
 	local inputName = UserInputService:GetStringForKeyCode(lastInput.KeyCode)
 
@@ -196,14 +212,18 @@ function globalInputService:CheckKeyPrompts()
 		local iconKey
 
 		if image:GetAttribute("InputName") and globalInputService.inputs[image:GetAttribute("InputName")] then
-			iconKey = globalInputService.inputs[image:GetAttribute("InputName")].KeyInputs[globalInputService.inputType][1].Name
+			iconKey =
+				globalInputService.inputs[image:GetAttribute("InputName")].KeyInputs[globalInputService.inputType][1].Name
 		end
 
 		local KEY = image:GetAttribute("Key")
 		local BUTTON = image:GetAttribute("Button")
 		local INPUT_NAME = image:GetAttribute("InputName")
 
-		if (globalInputService.inputType == "Gamepad" and BUTTON) or (globalInputService.inputType == "Keyboard" and KEY) then
+		if
+			(globalInputService.inputType == "Gamepad" and BUTTON)
+			or (globalInputService.inputType == "Keyboard" and KEY)
+		then
 			iconKey = globalInputService.inputType == "Gamepad" and BUTTON or KEY
 		elseif INPUT_NAME and globalInputService.inputs[INPUT_NAME] then
 			iconKey = globalInputService.inputs[INPUT_NAME].KeyInputs[globalInputService.inputType][1].Name
@@ -442,6 +462,13 @@ end
 
 UserInputService.InputBegan:Connect(setInputType)
 UserInputService.InputChanged:Connect(setInputType)
+
+if not CUSTOM_GAMEPAD_GUI then
+	return globalInputService
+end
+
+createCustomGamepadGui()
+
 GuiService.Changed:Connect(function()
 	if GuiService.SelectedObject then
 		if not stepped then
@@ -454,9 +481,7 @@ GuiService.Changed:Connect(function()
 	end
 end)
 
-if customGamepadUi then
-	Player:WaitForChild("PlayerGui").SelectionImageObject = hideSelection
-	customGamepadUi.Parent = Player.PlayerGui
-end
+Player:WaitForChild("PlayerGui").SelectionImageObject = hideSelection
+selectionUi.Parent = Player.PlayerGui
 
 return globalInputService
