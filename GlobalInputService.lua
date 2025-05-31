@@ -1,4 +1,4 @@
-export type Input = {
+export type InputAction = {
 	Name: string,
 	KeyInputs: {
 		Keyboard: { InputObject },
@@ -8,14 +8,14 @@ export type Input = {
 	Priority: number?,
 	IsEnabled: () -> boolean,
 
-	Enable: (self: Input) -> nil,
-	Disable: (self: Input) -> nil,
-	Refresh: (self: Input) -> nil,
-	SetPriority: (self: Input, priority: number | Enum.ContextActionPriority) -> nil,
-	SetKeybinds: (self: Input, bindGroup: "Gamepad" | "Keyboard", T...) -> nil,
-	AddKeybinds: (self: Input, bindGroup: "Gamepad" | "Keyboard", T...) -> nil,
-	RemoveKeybinds: (self: Input, bindGroup: "Gamepad" | "Keyboard", T...) -> nil,
-	ReplaceKeybinds: (self: Input, bindGroup: "Gamepad" | "Keyboard", keybindsTable: { InputObject }) -> nil,
+	Enable: (self: InputAction) -> nil,
+	Disable: (self: InputAction) -> nil,
+	Refresh: (self: InputAction) -> nil,
+	SetPriority: (self: InputAction, priority: number | Enum.ContextActionPriority) -> nil,
+	SetKeybinds: (self: InputAction, bindGroup: "Gamepad" | "Keyboard", T...) -> nil,
+	AddKeybinds: (self: InputAction, bindGroup: "Gamepad" | "Keyboard", T...) -> nil,
+	RemoveKeybinds: (self: InputAction, bindGroup: "Gamepad" | "Keyboard", T...) -> nil,
+	ReplaceKeybinds: (self: InputAction, bindGroup: "Gamepad" | "Keyboard", keybindsTable: { InputObject }) -> nil,
 }
 
 local CollectionService = game:GetService("CollectionService")
@@ -23,16 +23,18 @@ local ContextActionService = game:GetService("ContextActionService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
 local Player = Players.LocalPlayer
+local stepped
 
-local selectionUi = ReplicatedStorage.Assets.Gui.GamepadSelectionUi
-local selectionImage = selectionUi.SelectionImage
+-------------------------------------// Create Gamepad Gui
 
-local inputs: { Input } = {}
-local module = {
+local customGamepadUi: ScreenGui?
+
+---------------------------------------------------------
+
+local globalInputService = {
 	inputType = "Keyboard",
 	gamepadType = "Xbox",
 
@@ -140,7 +142,7 @@ local module = {
 		},
 	},
 
-	inputs = inputs,
+	inputs = {} :: { InputAction },
 	LastGamepadInput = nil,
 }
 
@@ -183,28 +185,28 @@ local function setGamepadType(lastInput)
 	local inputName = UserInputService:GetStringForKeyCode(lastInput.KeyCode)
 
 	if table.find(ps4Keys, inputName) then
-		module.gamepadType = "Ps4"
+		globalInputService.gamepadType = "Ps4"
 	elseif table.find(xboxKeys, inputName) then
-		module.gamepadType = "Xbox"
+		globalInputService.gamepadType = "Xbox"
 	end
 end
 
-function module:CheckKeyPrompts()
+function globalInputService:CheckKeyPrompts()
 	for _, image: ImageLabel in ipairs(CollectionService:GetTagged("KeyPrompt")) do
 		local iconKey
 
-		if image:GetAttribute("InputName") and module.inputs[image:GetAttribute("InputName")] then
-			iconKey = module.inputs[image:GetAttribute("InputName")].KeyInputs[module.inputType][1].Name
+		if image:GetAttribute("InputName") and globalInputService.inputs[image:GetAttribute("InputName")] then
+			iconKey = globalInputService.inputs[image:GetAttribute("InputName")].KeyInputs[globalInputService.inputType][1].Name
 		end
 
 		local KEY = image:GetAttribute("Key")
 		local BUTTON = image:GetAttribute("Button")
 		local INPUT_NAME = image:GetAttribute("InputName")
 
-		if (module.inputType == "Gamepad" and BUTTON) or (module.inputType == "Keyboard" and KEY) then
-			iconKey = module.inputType == "Gamepad" and BUTTON or KEY
-		elseif INPUT_NAME and module.inputs[INPUT_NAME] then
-			iconKey = module.inputs[INPUT_NAME].KeyInputs[module.inputType][1].Name
+		if (globalInputService.inputType == "Gamepad" and BUTTON) or (globalInputService.inputType == "Keyboard" and KEY) then
+			iconKey = globalInputService.inputType == "Gamepad" and BUTTON or KEY
+		elseif INPUT_NAME and globalInputService.inputs[INPUT_NAME] then
+			iconKey = globalInputService.inputs[INPUT_NAME].KeyInputs[globalInputService.inputType][1].Name
 		end
 
 		if not iconKey then
@@ -216,14 +218,14 @@ function module:CheckKeyPrompts()
 
 		local imageId
 
-		if module.inputIcons.Misc[iconKey] then
-			imageId = module.inputIcons.Misc[iconKey]
-		elseif module.inputIcons.Keyboard[iconKey] then
-			imageId = module.inputIcons.Keyboard[iconKey]
-		elseif module.inputIcons[module.gamepadType][iconKey] then
-			imageId = module.inputIcons[module.gamepadType][iconKey]
+		if globalInputService.inputIcons.Misc[iconKey] then
+			imageId = globalInputService.inputIcons.Misc[iconKey]
+		elseif globalInputService.inputIcons.Keyboard[iconKey] then
+			imageId = globalInputService.inputIcons.Keyboard[iconKey]
+		elseif globalInputService.inputIcons[globalInputService.gamepadType][iconKey] then
+			imageId = globalInputService.inputIcons[globalInputService.gamepadType][iconKey]
 		else
-			imageId = module.inputIcons.Misc.Unknown
+			imageId = globalInputService.inputIcons.Misc.Unknown
 		end
 
 		image.Image = imageId and "rbxassetid://" .. imageId or ""
@@ -239,24 +241,24 @@ local function setInputType(lastInput)
 	end
 
 	if lastInput.KeyCode == Enum.UserInputType.Touch then
-		module.inputType = "Mobile"
+		globalInputService.inputType = "Mobile"
 		return
 	end
 
 	if lastInput.UserInputType.Name:find("Gamepad") then
-		module.inputType = "Gamepad"
+		globalInputService.inputType = "Gamepad"
 		setGamepadType(lastInput)
-		module.LastGamepadInput = lastInput
+		globalInputService.LastGamepadInput = lastInput
 	else
-		module.inputType = "Keyboard"
+		globalInputService.inputType = "Keyboard"
 	end
 
-	if lastInputType ~= module.inputType or lastGamepadType ~= module.gamepadType then
-		module:CheckKeyPrompts()
+	if lastInputType ~= globalInputService.inputType or lastGamepadType ~= globalInputService.gamepadType then
+		globalInputService:CheckKeyPrompts()
 	end
 
-	lastInputType = module.inputType
-	lastGamepadType = module.gamepadType
+	lastInputType = globalInputService.inputType
+	lastGamepadType = globalInputService.gamepadType
 end
 
 local function Lerp(num, goal, i)
@@ -309,12 +311,12 @@ local function handleGamepadSelection()
 	end
 end
 
-function module.CreateNewInput(
+function globalInputService.CreateNewInput(
 	inputName: string,
 	func: () -> any?,
 	keyboardInputs: { InputObject } | InputObject,
 	gamepadInputs: { InputObject } | InputObject
-): Input
+): InputAction
 	if typeof(keyboardInputs) ~= "table" then
 		keyboardInputs = { keyboardInputs }
 	end
@@ -324,7 +326,7 @@ function module.CreateNewInput(
 	end
 
 	local inputIsEnabled = false
-	local newInput: Input = {
+	local newInput: InputAction = {
 		Name = inputName,
 		KeyInputs = {
 			Keyboard = keyboardInputs,
@@ -337,7 +339,7 @@ function module.CreateNewInput(
 			return inputIsEnabled
 		end,
 
-		Enable = function(self: Input)
+		Enable = function(self: InputAction)
 			local callback = self.Callback
 			inputIsEnabled = true
 
@@ -368,12 +370,12 @@ function module.CreateNewInput(
 			end
 		end,
 
-		Disable = function(self: Input)
+		Disable = function(self: InputAction)
 			inputIsEnabled = false
 			ContextActionService:UnbindAction(self.Name)
 		end,
 
-		Refresh = function(self: Input)
+		Refresh = function(self: InputAction)
 			if not inputIsEnabled then
 				return
 			end
@@ -382,23 +384,23 @@ function module.CreateNewInput(
 			self:Enable()
 		end,
 
-		SetPriority = function(self: Input, priority: number | Enum.ContextActionPriority)
+		SetPriority = function(self: InputAction, priority: number | Enum.ContextActionPriority)
 			self.Priority = tonumber(priority) and priority or priority.Value
 			self:Refresh()
 		end,
 
-		SetKeybinds = function(self: Input, bindGroup: "Gamepad" | "Keyboard", ...)
+		SetKeybinds = function(self: InputAction, bindGroup: "Gamepad" | "Keyboard", ...)
 			self.KeyInputs[bindGroup] = { ... }
 			self:Refresh()
 		end,
-		AddKeybinds = function(self: Input, bindGroup: "Gamepad" | "Keyboard", ...)
+		AddKeybinds = function(self: InputAction, bindGroup: "Gamepad" | "Keyboard", ...)
 			local keybinds = { ... }
 			for _, keybind: Enum.KeyCode | Enum.UserInputType in ipairs(keybinds) do
 				table.insert(self.KeyInputs[bindGroup], keybind)
 			end
 			self:Refresh()
 		end,
-		RemoveKeybinds = function(self: Input, bindGroup: "Gamepad" | "Keyboard", ...)
+		RemoveKeybinds = function(self: InputAction, bindGroup: "Gamepad" | "Keyboard", ...)
 			local keybinds = { ... }
 			for _, keybind in ipairs(keybinds) do
 				local keybindIndex = table.find(self.KeyInputs[bindGroup], keybind)
@@ -410,7 +412,11 @@ function module.CreateNewInput(
 			end
 			self:Refresh()
 		end,
-		ReplaceKeybinds = function(self: Input, bindGroup: "Gamepad" | "Keyboard", keybindsTable: { InputObject })
+		ReplaceKeybinds = function(
+			self: InputAction,
+			bindGroup: "Gamepad" | "Keyboard",
+			keybindsTable: { InputObject }
+		)
 			for toReplace, keybind in pairs(keybindsTable) do
 				local keybindIndex = table.find(self.KeyInputs[bindGroup], toReplace)
 				if not keybindIndex then
@@ -424,16 +430,18 @@ function module.CreateNewInput(
 		end,
 	}
 
-	module.inputs[inputName] = newInput
+	globalInputService.inputs[inputName] = newInput
 	newInput:Enable()
 
 	return newInput
 end
 
+function globalInputService.StartGame()
+	globalInputService:CheckKeyPrompts()
+end
+
 UserInputService.InputBegan:Connect(setInputType)
 UserInputService.InputChanged:Connect(setInputType)
-
-local stepped
 GuiService.Changed:Connect(function()
 	if GuiService.SelectedObject then
 		if not stepped then
@@ -446,11 +454,9 @@ GuiService.Changed:Connect(function()
 	end
 end)
 
-Player:WaitForChild("PlayerGui").SelectionImageObject = selectionUi.HideSelection
-selectionUi.Parent = Player.PlayerGui
-
-function module.StartGame()
-	module:CheckKeyPrompts()
+if customGamepadUi then
+	Player:WaitForChild("PlayerGui").SelectionImageObject = hideSelection
+	customGamepadUi.Parent = Player.PlayerGui
 end
 
-return module
+return globalInputService
