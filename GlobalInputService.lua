@@ -297,7 +297,7 @@ local function setInputType(lastInput)
 
 	if lastInputType ~= globalInputService._inputType or lastGamepadType ~= globalInputService._gamepadType then
 		globalInputService:CheckKeyPrompts()
-		globalInputService.inputTypeChanged:Fire(
+		globalInputService.InputTypeChanged:Fire(
 			globalInputService._inputType,
 			lastInputType,
 			globalInputService._gamepadType
