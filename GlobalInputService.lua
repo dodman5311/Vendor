@@ -237,19 +237,6 @@ local function createCustomGamepadGui()
 	hideSelection.ImageTransparency = 1
 
 	-- Extra
-	local centerImage = Instance.new("ImageLabel")
-	centerImage.BackgroundTransparency = 1
-	centerImage.Parent = selectionImage
-	centerImage.Image = "rbxassetid://78657964270656"
-	centerImage.ResampleMode = Enum.ResamplerMode.Pixelated
-	centerImage.ScaleType = Enum.ScaleType.Fit
-	centerImage.AnchorPoint = Vector2.new(0.5, 0.5)
-	centerImage.Position = UDim2.fromScale(0.5, 0.5)
-	centerImage.Size = UDim2.fromOffset(100, 100)
-
-	local uiSizeConstraint = Instance.new("UISizeConstraint")
-	uiSizeConstraint.Parent = centerImage
-	uiSizeConstraint.MinSize = Vector2.new(25, 25)
 end
 
 local function setGamepadType(lastInput)
