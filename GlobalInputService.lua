@@ -34,6 +34,13 @@ export type InputAction = {
 	RemoveKeybinds: (self: InputAction, bindGroup: "Gamepad" | "Keyboard", T...) -> nil,
 	ReplaceKeybinds: (self: InputAction, bindGroup: "Gamepad" | "Keyboard", keybindsTable: { InputObject }) -> nil,
 }
+
+export type ActionGroup = {
+	Name: string,
+	Actions: { InputAction },
+	Enable: (self: ActionGroup) -> nil,
+	Disable: (self: ActionGroup) -> nil,
+}
 type InputType = "Keyboard" | "Gamepad" | "Touch"
 type GamepadType = "Ps4" | "Xbox"?
 export type InputSource = {
@@ -182,6 +189,7 @@ local globalInputService = {
 	},
 
 	inputActions = {} :: { InputAction },
+	actionGroups = {} :: { ActionGroup },
 
 	_inputType = "Keyboard" :: InputType,
 	_gamepadType = "Xbox" :: GamepadType,
@@ -237,6 +245,19 @@ local function createCustomGamepadGui()
 	hideSelection.ImageTransparency = 1
 
 	-- Extra
+	local centerImage = Instance.new("ImageLabel")
+	centerImage.BackgroundTransparency = 1
+	centerImage.Parent = selectionImage
+	centerImage.Image = "rbxassetid://78657964270656"
+	centerImage.ResampleMode = Enum.ResamplerMode.Pixelated
+	centerImage.ScaleType = Enum.ScaleType.Fit
+	centerImage.AnchorPoint = Vector2.new(0.5, 0.5)
+	centerImage.Position = UDim2.fromScale(0.5, 0.5)
+	centerImage.Size = UDim2.fromOffset(100, 100)
+
+	local uiSizeConstraint = Instance.new("UISizeConstraint")
+	uiSizeConstraint.Parent = centerImage
+	uiSizeConstraint.MinSize = Vector2.new(25, 25)
 end
 
 local function setGamepadType(lastInput)
@@ -668,6 +689,44 @@ function globalInputService.CreateInputAction(
 	newInput:Enable()
 
 	return newInput
+end
+
+function globalInputService.CreateActionGroup(name: string): ActionGroup
+	local actionGroup: ActionGroup = {
+		Name = name,
+		Actions = {},
+		Enable = function(self)
+			for _, action: InputAction in pairs(self.Actions) do
+				action:Enable()
+			end
+		end,
+
+		Disable = function(self)
+			for _, action: InputAction in pairs(self.Actions) do
+				action:Disable()
+			end
+		end,
+	}
+	globalInputService.actionGroups[name] = actionGroup
+
+	return actionGroup
+end
+
+function globalInputService.AddToActionGroup(actionGroup: ActionGroup | string, ...)
+	if typeof(actionGroup) == "string" then
+		local actionGroupName = actionGroup
+		actionGroup = globalInputService.actionGroups[actionGroupName]
+
+		if not actionGroup then
+			actionGroup = globalInputService.CreateActionGroup(actionGroupName)
+		end
+	end
+
+	local actions = { ... }
+
+	for _, action in ipairs(actions) do
+		actionGroup.Actions[action.Name] = action
+	end
 end
 
 function globalInputService.StartGame()
