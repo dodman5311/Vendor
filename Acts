@@ -1,45 +1,9 @@
+local actAdded = Instance.new("BindableEvent")
+local actRemoved = Instance.new("BindableEvent")
 local actions = {
 	expiringActions = {},
-}
-
-local function callConnection(connection, ...)
-	for _, func in ipairs(connection.functions) do
-		task.spawn(func, ...)
-	end
-end
-
-actions.OnActAdded = {
-	functions = {},
-
-	Connect = function(self, callback)
-		local connection = self
-		local index = #self.functions + 1
-
-		self.functions[index] = callback
-
-		return {
-			Disconnect = function()
-				table.remove(connection.functions, index)
-			end,
-		}
-	end,
-}
-
-actions.OnActRemoved = {
-	functions = {},
-
-	Connect = function(self, callback)
-		local connection = self
-		local index = #self.functions + 1
-
-		self.functions[index] = callback
-
-		return {
-			Disconnect = function()
-				table.remove(connection.functions, index)
-			end,
-		}
-	end,
+	OnActAdded = actAdded.Event,
+	OnActRemoved = actRemoved.Event
 }
 
 actions.Condition = {
@@ -106,7 +70,7 @@ function actions:createAct(...)
 		end
 
 		table.insert(self, name)
-		callConnection(self.OnActAdded, name)
+		actAdded:Fire(name)
 
 		actCreated = table.find(self, name)
 	end
@@ -141,7 +105,7 @@ function actions:removeAct(...)
 		end
 
 		table.remove(self, table.find(self, name))
-		callConnection(self.OnActRemoved, name)
+		actRemoved:Fire(name)
 	end
 end
 
