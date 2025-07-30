@@ -578,8 +578,12 @@ function globalInputService.CreateInputAction(
 			local callback = self.Callback
 			inputIsEnabled = true
 
-			local allInputs = self.KeyInputs.Keyboard
+			local allInputs = {}
 			for _, input in ipairs(self.KeyInputs.Gamepad) do
+				table.insert(allInputs, input)
+			end
+
+			for _, input in ipairs(self.KeyInputs.Keyboard) do
 				table.insert(allInputs, input)
 			end
 
