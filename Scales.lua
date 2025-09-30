@@ -1,8 +1,5 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local signal = require(ReplicatedStorage.Packages.Signal)
-
 export type Scale = {
-	LastCheck : boolean,
+	LastCheck: boolean,
 	Contents: {},
 	--[[
 	1 Default
@@ -11,11 +8,10 @@ export type Scale = {
 	Check: (self: Scale) -> boolean,
 	Add: (self: Scale, index: string | number?, value: any?) -> boolean,
 	Remove: (self: Scale, index: string | number?) -> boolean,
-	Changed: signal.Signal<boolean>,
+	Changed: RBXScriptSignal<...boolean>,
 }
 
 local scales = {
-
 	activeScales = {},
 }
 
@@ -27,11 +23,11 @@ local function getSize(list: {})
 	return count
 end
 
-local function checkForSignal(scale: Scale)
-	local isOverThreshold : boolean = scale:Check()
+local function checkForSignal(scale: Scale, changedEvent: BindableEvent)
+	local isOverThreshold: boolean = scale:Check()
 
 	if scale.LastCheck ~= isOverThreshold then
-		scale.Changed:Fire(isOverThreshold)
+		changedEvent:Fire(isOverThreshold)
 	end
 
 	scale.LastCheck = isOverThreshold
@@ -40,6 +36,8 @@ local function checkForSignal(scale: Scale)
 end
 
 function scales.new(index: string?): Scale
+	local changedEvent = Instance.new("BindableEvent")
+
 	local scale: Scale = {
 		LastCheck = false,
 		Contents = {},
@@ -57,7 +55,7 @@ function scales.new(index: string?): Scale
 				table.insert(self.Contents, value or true)
 			end
 
-			return checkForSignal(self)
+			return checkForSignal(self, changedEvent)
 		end,
 		Remove = function(self: Scale, index: string | number?)
 			index = index or 1
@@ -68,10 +66,10 @@ function scales.new(index: string?): Scale
 				self.Contents[index] = nil
 			end
 
-			return checkForSignal(self)
+			return checkForSignal(self, changedEvent)
 		end,
 
-		Changed = signal.new(),
+		Changed = changedEvent.Event,
 	}
 
 	if index then
