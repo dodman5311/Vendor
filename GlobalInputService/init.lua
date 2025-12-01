@@ -56,7 +56,6 @@ local CUSTOM_MOBILE_BUTTON_IMAGES = {
 }
 
 --// Services
-local AppRatingPromptService = game:GetService("AppRatingPromptService")
 local CollectionService = game:GetService("CollectionService")
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
@@ -451,7 +450,7 @@ function globalInputService.CreateInputAction(
 			return
 		end,
 
-		GetMobileIcon = function(self: InputAction)
+		GetMobileIcon = function()
 			return buttonImage
 		end,
 
@@ -519,11 +518,11 @@ function globalInputService.CreateActionGroup(name: string): ActionGroup
 		Name = name,
 		Actions = {},
 		IsEnabled = not newScale:Check(),
-		Enable = function(self, index: any?)
+		Enable = function(self: ActionGroup, index: any?)
 			newScale:Remove(index)
 		end,
 
-		Disable = function(self, index: any?)
+		Disable = function(self: ActionGroup, index: any?)
 			newScale:Add(index)
 		end,
 	}
